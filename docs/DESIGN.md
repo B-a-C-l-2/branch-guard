@@ -76,3 +76,29 @@ Two lessons encoded in the codebase:
 2. Hermetic tests: `setup_repo` pins a repo-level `core.hooksPath`, because
    a machine-global hooksPath (even pointing at an empty directory) shadows
    test repos' `.git/hooks` and silently broke scenario 1.
+
+## Deferred ideas (hypothetical needs, recorded during testing)
+
+These came up while testing, not from real use. They are recorded here with
+their proposed mechanisms so the design thinking does not have to be
+redone if a real user ever asks. None are implemented.
+
+1. **`uninstall.sh --local`** — symmetric inverse of `install.sh --local`:
+   `rm -f $(git rev-parse --git-dir)/hooks/pre-commit`, never touching
+   global config. Rationale: symmetric install/uninstall lowers the fear of
+   trying `--local`. Trigger to implement: someone actually installs
+   `--local` and wants out.
+
+2. **Exempt one repo from a global install** — not an uninstall (the hook
+   file is shared); it is a *disable*. Already possible today with no code:
+   `git config core.hooksPath "$(git rev-parse --git-dir)/hooks"` inside
+   the repo (repo config beats global). Friendlier v2: wrap it, or have
+   the hook itself honor `git config --bool branch-guard.disabled`.
+
+3. **Temporary global off-switch** — `git config --global
+   branch-guard.disabled true`, checked by the hook at the top. Same
+   mechanism as (2), generalizes it. Pattern reference: `HUSKY=0`.
+
+Note the distinction these rely on: install/uninstall manage *file
+presence*; enable/disable manage *behavior*. "Globally installed but
+exempt here" cannot be expressed by deleting files.
