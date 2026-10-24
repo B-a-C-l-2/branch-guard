@@ -48,7 +48,7 @@ Absence of all markers means human: exit 0 immediately.
 ## Explicit non-goals (v1)
 
 - pre-push / push protection (use agent-git-guard alongside)
-- configurable protected-branch list (hardcoded: main, master)
+- configurable protected-branch list — promoted to Deferred ideas #4 below
 - PowerShell-native hook (Git Bash covers Windows)
 - branch naming from intent (a hook cannot know intent; timestamp it is)
 
@@ -102,3 +102,18 @@ redone if a real user ever asks. None are implemented.
 Note the distinction these rely on: install/uninstall manage *file
 presence*; enable/disable manage *behavior*. "Globally installed but
 exempt here" cannot be expressed by deleting files.
+
+4. **Configurable protected-branch list** (promoted from v1 non-goals) —
+   today `main master` is hardcoded in the hook. Proposed mechanism:
+   `protected=$(git config --get branch-guard.protected || echo "main master")`.
+   Reading through `git config` means repo-level values override
+   machine-global ones for free (git's own config layering does the work).
+   The case-statement list match in the hook already handles multi-word
+   lists, so this is a one-line change plus tests. Trigger to implement: a
+   user on a git-flow style workflow (develop/release branches) or anyone
+   who renames their default branch — renaming `master` to `main` is why
+   the hardcoded list has two entries in the first place. Note: of all the
+   deferred ideas this is the most likely to graduate, because branch
+   naming conventions genuinely vary across teams, unlike uninstall
+   ergonomics which are edge-case ergonomics.
+   
