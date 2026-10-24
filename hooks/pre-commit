@@ -1,0 +1,50 @@
+#!/bin/sh
+# branch-guard pre-commit hook
+#
+# When a coding agent tries to commit on a protected branch (main/master),
+# silently move the work onto a fresh branch first and let the commit
+# proceed there. A human committing the very same things is never touched.
+#
+# Bypass:  git commit --no-verify        (the human emergency exit)
+#          AGENT_GUARD_APPROVE=1          (explicit per-command approval)
+
+# --- 1. Agent detection -----------------------------------------------------
+# These markers are set by the agent runtime and inherited by every child
+# process, so they are present even when the commit comes from inside a
+# script the agent wrote.
+#   CLAUDECODE        Claude Code
+#   CODEX_THREAD_ID   Codex
+#   CODEX_SESSION_ID  Codex
+#   AGENT_GUARD=1     forces the guard on for anything else
+# Using another agent? Run `env | sort` inside its session and add its marker.
+if [ -z "$CLAUDECODE" ] && [ -z "$CODEX_THREAD_ID" ] && [ -z "$CODEX_SESSION_ID" ] && [ -z "$AGENT_GUARD" ]; then
+    exit 0
+fi
+
+# --- 2. Explicit approval ----------------------------------------------------
+if [ -n "${AGENT_GUARD_APPROVE:-}" ]; then
+    echo "branch-guard: guard bypassed with AGENT_GUARD_APPROVE" >&2
+    exit 0
+fi
+
+# --- 3. Are we on a protected branch? ----------------------------------------
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null) || exit 0  # detached HEAD: leave it alone
+protected="main master"
+case " $protected " in
+    *" $branch "*) ;;   # on a protected branch -> act
+    *) exit 0 ;;        # anywhere else -> fine
+esac
+
+# --- 4. Move the work to a fresh branch --------------------------------------
+# `git switch -c` carries staged and unstaged changes along, so the commit
+# that triggered this hook will land on the new branch untouched.
+new_branch="agent/$(date +%Y%m%d-%H%M%S)-$$"
+if git switch -c "$new_branch" 2>/dev/null; then
+    echo "branch-guard: agent was about to commit on '$branch';" >&2
+    echo "branch-guard: moved the work to '$new_branch'. Commit proceeds there." >&2
+else
+    echo "branch-guard: could not create a branch; refusing commit on '$branch'." >&2
+    echo "branch-guard: create a branch yourself, or bypass with --no-verify." >&2
+    exit 1
+fi
+exit 0
