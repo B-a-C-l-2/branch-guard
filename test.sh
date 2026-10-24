@@ -15,6 +15,7 @@ setup_repo() {
     git -C "$dir" init -q -b main
     git -C "$dir" config user.email test@example.com
     git -C "$dir" config user.name Test
+    git -C "$dir" config core.hooksPath "$dir/.git/hooks"   # hermetic: repo-level beats any machine-global hooksPath
     cp "$here/hooks/pre-commit" "$dir/.git/hooks/pre-commit"
     chmod +x "$dir/.git/hooks/pre-commit"
     echo x > "$dir/file.txt"
@@ -62,6 +63,20 @@ echo change >> "$r/file.txt"
 (unset CLAUDECODE CODEX_SESSION_ID AGENT_GUARD; CODEX_THREAD_ID=test AGENT_GUARD_APPROVE=1 git -C "$r" add file.txt 2>/dev/null)
 (unset CLAUDECODE CODEX_SESSION_ID AGENT_GUARD; CODEX_THREAD_ID=test AGENT_GUARD_APPROVE=1 git -C "$r" commit -qm work)
 check "approved agent stays on main" "$(git -C "$r" symbolic-ref --short HEAD)" "main"
+
+echo "== scenario 5 (regression): uninstall when the stored config uses Windows path form"
+# install and uninstall can run under different shells on Windows, leaving a
+# C:/... value in the config while $HOME expands to /c/... (MSYS form).
+# HOME is sandboxed to a temp dir, so the real machine config is untouched.
+d=$(mktemp -d)
+mkdir -p "$d/.git-hooks"
+    git -C "$dir" config core.hooksPath "$dir/.git/hooks"   # hermetic: repo-level beats any machine-global hooksPath
+cp "$here/hooks/pre-commit" "$d/.git-hooks/pre-commit"
+winform=$(cd "$d" && pwd -W 2>/dev/null || pwd)   # C:/... on MSYS, plain path elsewhere
+HOME="$d" git config --global core.hooksPath "$winform/.git-hooks"
+HOME="$d" sh "$here/uninstall.sh" >/dev/null
+check "config unset despite path form mismatch" "$(HOME="$d" git config --global --get core.hooksPath 2>/dev/null || echo unset)" "unset"
+check "hook file removed" "$([ -f "$d/.git-hooks/pre-commit" ] && echo present || echo gone)" "gone"
 
 echo
 echo "$pass passed, $fail failed"

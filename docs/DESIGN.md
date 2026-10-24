@@ -57,3 +57,22 @@ Absence of all markers means human: exit 0 immediately.
 - Husky repos override the global hooksPath; see README.
 - Detached HEAD is left alone.
 - DeepSeek Harness marker unknown; add it when found (`env | sort`).
+
+## Post-mortem: path-form mismatch in uninstall (fixed)
+
+Reported through real use: uninstall removed the hook file but left the
+global `core.hooksPath` set. Root cause: install and uninstall can run
+under different shells on Windows, so the stored value was `C:/...` while
+`$HOME` expanded to `/c/...` (MSYS form). MSYS translates paths at the
+syscall layer (which is why `rm` worked), but `[ = ]` is a pure string
+comparison with no filesystem awareness. Fix: normalize both sides with
+`cygpath -m` (Windows form, forward slashes) before comparing.
+
+Two lessons encoded in the codebase:
+
+1. Regression first: scenario 5 in `test.sh` reproduces the mismatch and
+   failed before the fix. It sandboxes `HOME` so the real machine config
+   is untouched.
+2. Hermetic tests: `setup_repo` pins a repo-level `core.hooksPath`, because
+   a machine-global hooksPath (even pointing at an empty directory) shadows
+   test repos' `.git/hooks` and silently broke scenario 1.
