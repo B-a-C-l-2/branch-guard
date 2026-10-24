@@ -1,7 +1,7 @@
 # branch-guard
 
 A git pre-commit hook that stops a coding agent from committing on `main`.
-When an agent tries, its work is silently moved to a fresh `agent/<timestamp>`
+When an agent tries, its work is silently moved to a fresh `agent/<timestamp>-<pid>`
 branch and the commit proceeds there. A human committing the very same
 things is never touched.
 
@@ -14,7 +14,7 @@ whatever started it, including one fired from inside a script the agent wrote.
 
 | the agent commits | result |
 |---|---|
-| on `main` / `master` | work moved to `agent/<timestamp>`, commit lands there |
+| on `main` / `master` | work moved to `agent/<timestamp>-<pid>`, commit lands there |
 | on any other branch | allowed, untouched |
 | with `AGENT_GUARD_APPROVE=1` | allowed (explicit per-command approval) |
 | and when it is **you** committing, not an agent | always allowed |
