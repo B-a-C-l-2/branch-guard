@@ -1,43 +1,42 @@
 # branch-guard
 
-A git pre-commit hook that stops a coding agent from committing on `main`.
-When an agent tries, its work is silently moved to a fresh `agent/<timestamp>-<pid>`
-branch and the commit proceeds there. A human committing the very same
-things is never touched.
+一个 git pre-commit 钩子，阻止编码 agent 在 `main` 上提交。
+当 agent 试图提交时，它的工作会被静默迁移到一个全新的
+`agent/<timestamp>-<pid>` 分支，提交随后在那里落地。而人类提交完全
+相同的内容时，永远不会被干预。
 
-It exists because agents do not create branches unless told to — and even
-when told to (via AGENTS.md or system prompts), they forget. Instructions
-are a gentleman's agreement; a git hook sees every commit, whoever or
-whatever started it, including one fired from inside a script the agent wrote.
+它之所以存在，是因为 agent 不被告知就不会创建分支——而即使被告知
+（通过 AGENTS.md 或系统提示词），它们也会忘。指令只是君子协定；git
+钩子能看到每一次提交，无论发起者是谁、是什么，包括从 agent 自己写的
+脚本内部触发的那一次。
 
-## What it does
+## 它做什么
 
-| the agent commits | result |
+| 提交时的情况 | 结果 |
 |---|---|
-| on `main` / `master` | work moved to `agent/<timestamp>-<pid>`, commit lands there |
-| on any other branch | allowed, untouched |
-| with `AGENT_GUARD_APPROVE=1` | allowed (explicit per-command approval) |
-| and when it is **you** committing, not an agent | always allowed |
+| agent 在 `main` / `master` 上提交 | 工作被移到 `agent/<timestamp>-<pid>`，提交落在那里 |
+| agent 在任何其他分支上提交 | 允许，不做处理 |
+| agent 带 `AGENT_GUARD_APPROVE=1` 提交 | 允许（按命令显式批准） |
+| **你**（而不是 agent）提交 | 始终允许 |
 
-Bypass remains the human's choice: `git commit --no-verify` skips the hook.
+绕过始终是人类的选择：`git commit --no-verify` 会跳过钩子。
 
-## How it knows it is an agent
+## 它如何判断自己是 agent
 
-Agent runtimes set marker environment variables that every child process
-inherits — so the marker is present even when the commit comes from a script
-the agent wrote:
+agent 运行时会设置标记环境变量，每个子进程都会继承——所以即使提交
+来自 agent 写的脚本，标记也依然存在：
 
-| marker | runtime |
+| 标记 | 运行时 |
 |---|---|
 | `CLAUDECODE` | Claude Code |
-| `CODEX_THREAD_ID`, `CODEX_SESSION_ID` | Codex |
-| `AGENT_GUARD=1` | forces the guard on for anything else |
+| `CODEX_THREAD_ID`、`CODEX_SESSION_ID` | Codex |
+| `AGENT_GUARD=1` | 对其他任何东西强制启用守卫 |
 
-Using a different agent? Run `env | sort` inside its session, find its
-marker, and add it to the list in `hooks/pre-commit`. (Known gap: DeepSeek
-Harness's marker is not in the list yet — contributions welcome.)
+用的是别的 agent？在它的会话里运行 `env | sort`，找到它的标记，
+然后加到 `hooks/pre-commit` 的列表中。（已知缺口：DeepSeek
+Harness 的标记尚未加入列表——欢迎贡献。）
 
-## Install
+## 安装
 
 ```sh
 git clone <this repo>
@@ -45,34 +44,34 @@ cd branch-guard
 ./install.sh
 ```
 
-That copies the hook to `~/.git-hooks` and sets the global `core.hooksPath`.
-Global on purpose: an agent clones repositories of its own while it works,
-and a hook inside one repo is not in a clone made five minutes later.
-`./install.sh --local` installs into the current repository only.
-`./uninstall.sh` removes it.
+这会把钩子复制到 `~/.git-hooks` 并设置全局 `core.hooksPath`。
+之所以是全局的：agent 在工作过程中会自己克隆仓库，而装在某个仓库里的
+钩子不会出现在五分钟后才做的克隆里。
+`./install.sh --local` 只安装到当前仓库。
+`./uninstall.sh` 将其移除。
 
-POSIX sh, no dependencies. Works on Linux, macOS, and Windows via Git Bash
-(Git for Windows runs hooks through its bundled sh, so no separate Windows
-version is needed).
+纯 POSIX sh，无依赖。可在 Linux、macOS 以及 Windows（通过 Git Bash）
+上运行（Git for Windows 通过其自带的 sh 运行钩子，因此不需要单独的
+Windows 版本）。
 
-## If you use husky
+## 如果你使用 husky
 
-Husky sets `core.hooksPath` per repository, and repository config beats
-global config, so in a husky repo the global hook never runs. Add one line
-to that repo's `.husky/pre-commit`:
+Husky 会按仓库设置 `core.hooksPath`，而仓库配置优先于全局配置，因此
+在 husky 仓库里全局钩子永远不会运行。在该仓库的 `.husky/pre-commit`
+中加一行：
 
 ```sh
 "$HOME"/.git-hooks/pre-commit "$@" || exit 1
 ```
 
-## Develop
+## 开发
 
 ```sh
-./test.sh   # acceptance tests: creates throwaway repos in your temp dir
+./test.sh   # 验收测试：在你的临时目录里创建一次性仓库
 ```
 
-Design notes and the acceptance list live in [docs/DESIGN.md](docs/DESIGN.md).
+设计说明与验收清单见 [docs/DESIGN.md](docs/DESIGN.md)。
 
-## License
+## 许可证
 
 MIT
