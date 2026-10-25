@@ -14,7 +14,7 @@
 
 | 提交时的情况 | 结果 |
 |---|---|
-| agent 在 `main` / `master` 上提交 | 工作被移到 `agent/<timestamp>-<pid>`，提交落在那里 |
+| agent 在受保护分支上提交（默认 `main` / `master`） | 工作被移到 `agent/<timestamp>-<pid>`，提交落在那里 |
 | agent 在任何其他分支上提交 | 允许，不做处理 |
 | agent 带 `AGENT_GUARD_APPROVE=1` 提交 | 允许（按命令显式批准） |
 | **你**（而不是 agent）提交 | 始终允许 |
@@ -53,6 +53,23 @@ cd branch-guard
 纯 POSIX sh，无依赖。可在 Linux、macOS 以及 Windows（通过 Git Bash）
 上运行（Git for Windows 通过其自带的 sh 运行钩子，因此不需要单独的
 Windows 版本）。
+
+## 自定义受保护分支
+
+默认保护 `main` 和 `master`。要换成别的分支，配置 `branch-guard.protected`：
+
+```sh
+# 全局：本机所有仓库（仓库级配置会覆盖它）
+git config --global branch-guard.protected "main develop release"
+
+# 只对当前仓库生效
+git config branch-guard.protected "main develop"
+```
+
+- 空格分隔的列表，整串**替换**默认值，而不是追加。
+- 设成空字符串（`git config branch-guard.protected ""`）等于谁都不保护。
+- 不支持通配符：`release/*` 不会匹配 `release/1.2`，分支名要逐字写出。
+- 查看当前值及它来自哪一层配置：`git config --show-origin --get branch-guard.protected`。
 
 ## 如果你使用 husky
 

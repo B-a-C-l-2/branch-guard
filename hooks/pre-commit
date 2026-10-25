@@ -1,7 +1,8 @@
 #!/bin/sh
 # branch-guard pre-commit hook
 #
-# When a coding agent tries to commit on a protected branch (main/master),
+# When a coding agent tries to commit on a protected branch (default
+# "main master", override with branch-guard.protected),
 # silently move the work onto a fresh branch first and let the commit
 # proceed there. A human committing the very same things is never touched.
 #
@@ -28,8 +29,13 @@ if [ -n "${AGENT_GUARD_APPROVE:-}" ]; then
 fi
 
 # --- 3. Are we on a protected branch? ----------------------------------------
+# The list is one space-separated string. `git config --get` exits 1 when the
+# key is unset, so `||` supplies the default; it exits 0 for an empty value,
+# which means "protect nothing". Reading through `git config` gets the layering
+# for free: repo-level config overrides global. Wildcards are not supported --
+# branch names are matched literally in the case statement below.
 branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null) || exit 0  # detached HEAD: leave it alone
-protected="main master"
+protected=$(git config --get branch-guard.protected || echo "main master")
 case " $protected " in
     *" $branch "*) ;;   # on a protected branch -> act
     *) exit 0 ;;        # anywhere else -> fine

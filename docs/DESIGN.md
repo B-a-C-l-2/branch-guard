@@ -28,6 +28,16 @@
    已暂存和未暂存的改动一起带过去，因此触发钩子的那次提交可以在新
    分支上继续。agent 读到钩子的 stderr 消息后继续即可。
 
+5. **受保护分支列表可配置。**
+   `protected=$(git config --get branch-guard.protected || echo "main master")`。
+   `git config --get` 在键不存在时退出码为 1——在 shell 里 1 是"失败"，
+   所以 `||` 右侧的回退会执行；键存在时退出码为 0，回退不执行。
+   走 `git config` 读取还免费得到配置分层：仓库级值覆盖全局值。
+   列表是一条空格分隔的字符串，整串替换默认值；空值表示不保护任何分支。
+   不支持通配符——`case` 中的分支名按字面量匹配。
+   选"一条字符串"而不是多值键（`--add` / `--get-all`），是因为 `--get`
+   对多值只返回最后一条，而 `--add` 容易让用户误以为在追加到默认列表。
+
 ## Agent 检测
 
 标记是 agent 运行时设置、并被所有子进程继承的环境变量：
@@ -35,17 +45,22 @@
 `CODEX_SESSION_ID`（Codex）、`AGENT_GUARD=1`（手动覆盖）。
 所有标记都不存在即视为人类：立即 exit 0。
 
-## 验收清单（可执行：../test.sh）
+## 验收清单（可执行：../test.sh，场景 1-8）
 
 1. agent 在 main 上提交 → 被移到 `agent/*`，提交落在那里，main 不变。
 2. 人类在 main 上提交 → 不做处理。
 3. agent 在功能分支上提交 → 不做处理。
 4. 在 main 上带 `AGENT_GUARD_APPROVE=1` → 允许。
+5. 配置 `branch-guard.protected develop` 后，agent 在 develop 上提交 →
+   被移到 `agent/*`，develop 不变。
+6. 配置替换默认值：配了 develop 后，agent 在 main 上提交 → 允许。
+7. 仓库级配置覆盖全局配置：全局保护 develop、仓库保护 main 时，
+   agent 在 main 上提交 → 被移走；在 develop 上提交 → 允许。
+8. 列表为空 → 谁都不保护，agent 在 main 上提交 → 允许。
 
 ## 明确的非目标（v1）
 
 - pre-push / 推送保护（请配合 agent-git-guard 一起使用）
-- 可配置的受保护分支列表——已提升为下方"延后想法 #4"
 - PowerShell 原生钩子（Git Bash 已覆盖 Windows）
 - 依据意图命名分支（钩子无法知道意图；就用时间戳）
 
@@ -53,6 +68,8 @@
 
 - husky 仓库会覆盖全局 hooksPath；见 README。
 - detached HEAD 不做处理。
+- 受保护分支按字面量匹配，不支持 `release/*` 之类的通配符。
+- 把列表配置成空字符串等同于关闭保护；见 README 的"自定义受保护分支"。
 - DeepSeek Harness 的标记未知；发现后请加入（`env | sort`）。
 
 ## 事后复盘：uninstall 中的路径形式不匹配（已修复）
@@ -66,7 +83,7 @@ shell 下运行，因此存下的值是 `C:/...`，而 `$HOME` 却展开为 `/c/
 
 代码库中沉淀了两条经验：
 
-1. 回归测试先行：`test.sh` 中的场景 5 复现了该不匹配，并在修复前
+1. 回归测试先行：`test.sh` 中的场景 9 复现了该不匹配，并在修复前
    失败。它把 `HOME` 沙箱化，因此不会碰到真实的机器配置。
 2. 测试要封闭：`setup_repo` 固定了仓库级 `core.hooksPath`，因为机器
    级 hooksPath（即使指向一个空目录）会遮蔽测试仓库的 `.git/hooks`，
@@ -96,14 +113,5 @@ shell 下运行，因此存下的值是 `C:/...`，而 `$HOME` 却展开为 `/c/
 enable/disable 管理的是*行为*。"全局安装了但这里豁免"无法通过删除
 文件来表达。
 
-4. **可配置的受保护分支列表**（从 v1 非目标提升而来）——
-   目前 `main master` 硬编码在钩子里。提议的机制：
-   `protected=$(git config --get branch-guard.protected || echo "main master")`。
-   通过 `git config` 读取意味着仓库级的值会免费覆盖机器级的值
-   （git 自身的配置分层替我们完成了工作）。钩子中 case 语句的列表
-   匹配本来就支持多词列表，因此这只是一行改动加上测试。实现触发
-   条件：使用 git-flow 风格工作流（develop/release 分支）的用户，或
-   任何重命名默认分支的人——把 `master` 改名为 `main`，正是硬编码
-   列表里有两个条目的原因。注意：在所有延后想法中，这一个最可能
-   毕业，因为分支命名约定确实因团队而异，而不像卸载易用性那样属于
-   边缘场景的易用性问题。
+原来的第 4 条（可配置受保护分支列表）已实现，见上文"决策 5"，
+不再留在本清单里。

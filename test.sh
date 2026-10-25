@@ -1,6 +1,6 @@
 #!/bin/sh
-# branch-guard acceptance tests. Each scenario maps to one line in the
-# acceptance list (docs/DESIGN.md). Run: ./test.sh
+# branch-guard acceptance tests. Scenarios 1-8 map to the acceptance list in
+# docs/DESIGN.md; scenario 9 is a regression test for uninstall. Run: ./test.sh
 set -e
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 pass=0; fail=0
@@ -8,6 +8,8 @@ pass=0; fail=0
 # Run a command with a clean, controlled marker environment.
 as_human() { (unset CLAUDECODE CODEX_THREAD_ID CODEX_SESSION_ID AGENT_GUARD AGENT_GUARD_APPROVE; "$@"); }
 as_agent() { (unset CLAUDECODE CODEX_SESSION_ID AGENT_GUARD AGENT_GUARD_APPROVE; CODEX_THREAD_ID=test "$@"); }
+# like as_agent, but HOME points at $h so global config is sandboxed
+as_agent_h() { (unset CLAUDECODE CODEX_SESSION_ID AGENT_GUARD AGENT_GUARD_APPROVE; HOME="$h" CODEX_THREAD_ID=test "$@"); }
 
 # fresh playground repo with one commit on main; prints its path
 setup_repo() {
@@ -64,13 +66,54 @@ echo change >> "$r/file.txt"
 (unset CLAUDECODE CODEX_SESSION_ID AGENT_GUARD; CODEX_THREAD_ID=test AGENT_GUARD_APPROVE=1 git -C "$r" commit -qm work)
 check "approved agent stays on main" "$(git -C "$r" symbolic-ref --short HEAD)" "main"
 
-echo "== scenario 5 (regression): uninstall when the stored config uses Windows path form"
+echo "== scenario 5: configurable list moves work off the configured branch"
+r=$(setup_repo)
+git -C "$r" config branch-guard.protected develop
+git -C "$r" switch -qc develop
+echo change >> "$r/file.txt"
+as_agent git -C "$r" add file.txt 2>/dev/null
+as_agent git -C "$r" commit -qm work
+check "agent moved off configured develop" "$(git -C "$r" symbolic-ref --short HEAD | cut -d/ -f1)" "agent"
+check "develop has no new commit" "$(git -C "$r" log develop --oneline | wc -l | tr -d ' ')" "1"
+
+echo "== scenario 6: configured list replaces the default (main is no longer protected)"
+r=$(setup_repo)
+git -C "$r" config branch-guard.protected develop
+echo change >> "$r/file.txt"
+as_agent git -C "$r" add file.txt 2>/dev/null
+as_agent git -C "$r" commit -qm work
+check "agent stays on unlisted main" "$(git -C "$r" symbolic-ref --short HEAD)" "main"
+check "main got the commit" "$(git -C "$r" log main --oneline | wc -l | tr -d ' ')" "2"
+
+echo "== scenario 7: repo-level config overrides the global one"
+r=$(setup_repo)
+h=$(mktemp -d)
+HOME="$h" git config --global branch-guard.protected develop
+git -C "$r" config branch-guard.protected main
+echo change >> "$r/file.txt"
+as_agent_h git -C "$r" add file.txt 2>/dev/null
+as_agent_h git -C "$r" commit -qm work
+check "repo-level main is protected" "$(git -C "$r" symbolic-ref --short HEAD | cut -d/ -f1)" "agent"
+git -C "$r" switch -qc develop main
+echo more >> "$r/file.txt"
+as_agent_h git -C "$r" add file.txt 2>/dev/null
+as_agent_h git -C "$r" commit -qm more
+check "global develop is overridden away" "$(git -C "$r" symbolic-ref --short HEAD)" "develop"
+
+echo "== scenario 8: an empty list protects nothing"
+r=$(setup_repo)
+git -C "$r" config branch-guard.protected ""
+echo change >> "$r/file.txt"
+as_agent git -C "$r" add file.txt 2>/dev/null
+as_agent git -C "$r" commit -qm work
+check "empty list leaves main unprotected" "$(git -C "$r" symbolic-ref --short HEAD)" "main"
+
+echo "== scenario 9 (regression): uninstall when the stored config uses Windows path form"
 # install and uninstall can run under different shells on Windows, leaving a
 # C:/... value in the config while $HOME expands to /c/... (MSYS form).
 # HOME is sandboxed to a temp dir, so the real machine config is untouched.
 d=$(mktemp -d)
 mkdir -p "$d/.git-hooks"
-    git -C "$dir" config core.hooksPath "$dir/.git/hooks"   # hermetic: repo-level beats any machine-global hooksPath
 cp "$here/hooks/pre-commit" "$d/.git-hooks/pre-commit"
 winform=$(cd "$d" && pwd -W 2>/dev/null || pwd)   # C:/... on MSYS, plain path elsewhere
 HOME="$d" git config --global core.hooksPath "$winform/.git-hooks"
